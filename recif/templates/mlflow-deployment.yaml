@@ -1,0 +1,199 @@
+{{- if .Values.mlflow.enabled }}
+# -- MLflow: Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlflow-system
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: recif
+---
+# -- MLflow: PostgreSQL Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mlflow-secrets
+  namespace: mlflow-system
+  labels:
+    {{- include "recif.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mlflow
+type: Opaque
+stringData:
+  postgres-password: {{ .Values.mlflow.postgresql.password | quote }}
+---
+# -- MLflow: PostgreSQL StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mlflow-postgresql
+  namespace: mlflow-system
+  labels:
+    {{- include "recif.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mlflow-postgresql
+spec:
+  serviceName: mlflow-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow-postgresql
+  template:
+    metadata:
+      labels:
+        app: mlflow-postgresql
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: mlflow
+            - name: POSTGRES_USER
+              value: mlflow
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-secrets
+                  key: postgres-password
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+# -- MLflow: PostgreSQL Service (headless)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-postgresql
+  namespace: mlflow-system
+  labels:
+    {{- include "recif.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mlflow-postgresql
+spec:
+  selector:
+    app: mlflow-postgresql
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None
+---
+# -- MLflow: Artifact PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts-pvc
+  namespace: mlflow-system
+  labels:
+    {{- include "recif.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mlflow
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.mlflow.storage }}
+---
+# -- MLflow: Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: mlflow-system
+  labels:
+    {{- include "recif.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+        - name: mlflow
+          image: {{ .Values.mlflow.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.mlflow.port }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              pip install mlflow psycopg2-binary --quiet &&
+              mlflow server \
+                --host 0.0.0.0 \
+                --port {{ .Values.mlflow.port }} \
+                --backend-store-uri "postgresql://mlflow:$(POSTGRES_PASSWORD)@mlflow-postgresql.mlflow-system:5432/mlflow" \
+                --default-artifact-root /mlflow/artifacts \
+                --allowed-hosts "*"
+          env:
+            - name: MLFLOW_ALLOW_INBOUND_CONNECTIONS_FROM_ANY_HOST
+              value: "true"
+            - name: MLFLOW_ENABLE_ASYNC_TRACE_LOGGING
+              value: "true"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-secrets
+                  key: postgres-password
+          volumeMounts:
+            - name: mlflow-artifacts
+              mountPath: /mlflow/artifacts
+          resources:
+            requests:
+              cpu: 200m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.mlflow.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.mlflow.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: mlflow-artifacts
+          persistentVolumeClaim:
+            claimName: mlflow-artifacts-pvc
+---
+# -- MLflow: Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: mlflow-system
+  labels:
+    {{- include "recif.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mlflow
+spec:
+  selector:
+    app: mlflow
+  ports:
+    - port: {{ .Values.mlflow.port }}
+      targetPort: {{ .Values.mlflow.port }}
+  type: ClusterIP
+{{- end }}

@@ -1,0 +1,104 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "recif.fullname" . }}-postgresql-init
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "postgresql") | nindent 4 }}
+data:
+  init.sql: |
+    -- Create databases and extensions for Recif platform
+    SELECT 'CREATE DATABASE corail_storage'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'corail_storage')\gexec
+
+    -- Enable pgvector on the main database
+    CREATE EXTENSION IF NOT EXISTS vector;
+
+    -- Create corail schema in the main database
+    CREATE SCHEMA IF NOT EXISTS corail;
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "recif.fullname" . }}-postgresql
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "postgresql") | nindent 4 }}
+spec:
+  serviceName: {{ include "recif.fullname" . }}-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "postgresql") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "postgresql") | nindent 8 }}
+    spec:
+      containers:
+        - name: postgresql
+          image: {{ .Values.postgresql.image }}
+          ports:
+            - name: postgresql
+              containerPort: {{ .Values.postgresql.port }}
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.credentials.username | quote }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.postgresql.credentials.password | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.credentials.database | quote }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.postgresql.credentials.username | quote }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.postgresql.credentials.username | quote }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: {{ include "recif.fullname" . }}-postgresql-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "recif.fullname" . }}-postgresql
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "postgresql") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.postgresql.port }}
+      targetPort: postgresql
+      protocol: TCP
+      name: postgresql
+  selector:
+    {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "postgresql") | nindent 4 }}
+{{- end }}

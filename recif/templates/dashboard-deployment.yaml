@@ -1,0 +1,59 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "recif.fullname" . }}-dashboard
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "dashboard") | nindent 4 }}
+spec:
+  replicas: {{ .Values.dashboard.replicas }}
+  selector:
+    matchLabels:
+      {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "dashboard") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "dashboard") | nindent 8 }}
+    spec:
+      containers:
+        - name: dashboard
+          image: {{ printf "%s:%s" .Values.dashboard.image (.Values.global.imageTag | default "latest") }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.dashboard.port }}
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: {{ if .Values.dashboard.apiUrl }}{{ .Values.dashboard.apiUrl | quote }}{{ else }}http://{{ include "recif.fullname" . }}-api:{{ .Values.api.port }}{{ end }}
+          resources:
+            {{- toYaml .Values.dashboard.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "recif.fullname" . }}-dashboard
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "dashboard") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.dashboard.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "dashboard") | nindent 4 }}
+{{- end }}

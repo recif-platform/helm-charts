@@ -1,0 +1,13 @@
+apiVersion: v2
+name: recif
+description: Recif -- Open-source Kubernetes-native agentic AI platform
+version: 0.1.0
+appVersion: "0.1.0"
+type: application
+keywords:
+  - ai
+  - agents
+  - kubernetes
+  - governance
+  - llm
+home: https://github.com/recif-platform/recif
