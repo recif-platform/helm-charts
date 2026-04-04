@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Reconciliation interval (default 3m, reduced for dev)
+  timeout.reconciliation: "30s"
+
+  # Custom health check for Agent CRDs — ArgoCD defaults unknown CRDs to "Healthy"
+  resource.customizations.health.agents.recif.dev_Agent: |
+    hs = {}
+    if obj.status ~= nil then
+      if obj.status.phase == "Running" then
+        hs.status = "Healthy"
+        hs.message = obj.status.endpoint or "Agent running"
+      elseif obj.status.phase == "Pending" then
+        hs.status = "Progressing"
+        hs.message = "Agent starting up"
+      elseif obj.status.phase == "Failed" then
+        hs.status = "Degraded"
+        hs.message = "Agent failed"
+      elseif obj.status.phase == "Terminated" then
+        hs.status = "Suspended"
+        hs.message = "Agent terminated"
+      else
+        hs.status = "Progressing"
+        hs.message = "Unknown phase: " .. (obj.status.phase or "nil")
+      end
+    else
+      hs.status = "Progressing"
+      hs.message = "Waiting for operator to set status"
+    end
+    return hs

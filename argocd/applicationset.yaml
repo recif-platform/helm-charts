@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: recif-agents
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/recif-platform/recif-state
+        revision: main
+        directories:
+          - path: agents/*/*
+  template:
+    metadata:
+      name: 'agent-{{path.basename}}'
+      namespace: argocd
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/recif-platform/recif-state
+        targetRevision: main
+        path: '{{path}}'
+        directory:
+          include: 'manifest.yaml'
+      destination:
+        server: https://kubernetes.default.svc
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=false
+          - ServerSideApply=true

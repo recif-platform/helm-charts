@@ -1,0 +1,166 @@
+# -- Global settings
+global:
+  imageTag: "latest"
+  imagePullPolicy: IfNotPresent
+  teamNamespace: "team-default"
+
+# -- Recif API
+api:
+  replicas: 1
+  image: ghcr.io/recif-platform/recif-api
+  port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  env:
+    AUTH_ENABLED: "false"
+    LOG_LEVEL: "info"
+    LOG_FORMAT: "json"
+    ENV_PROFILE: "dev"
+
+# -- Recif Operator
+operator:
+  replicas: 1
+  image: ghcr.io/recif-platform/recif-operator
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# -- Dashboard
+dashboard:
+  enabled: true
+  replicas: 1
+  image: ghcr.io/recif-platform/recif-dashboard
+  port: 3000
+  apiUrl: ""  # override to set NEXT_PUBLIC_API_URL at runtime (e.g. http://recif-api:8080)
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# -- PostgreSQL
+postgresql:
+  enabled: true
+  image: pgvector/pgvector:pg16
+  storage: 10Gi
+  port: 5432
+  credentials:
+    database: recif
+    username: recif
+    password: recif_dev  # override in prod!
+
+# -- Corail (default agent image)
+corail:
+  image: ghcr.io/recif-platform/corail
+  defaultModel: "ollama/qwen3.5:4b"
+
+# -- Ollama (optional, for local models)
+ollama:
+  enabled: false  # Set true to run Ollama in-cluster. Most users connect to their own Ollama or cloud LLM.
+  # When ollama.enabled=false but you still want agents / ingestion to use a
+  # local / external Ollama, point this at its URL. Examples:
+  #   colima / docker-desktop on macOS: http://host.docker.internal:11434
+  #   k3s on the same host            : http://<host-ip>:11434
+  #   managed endpoint                : https://ollama.mycompany.ai
+  # Leave empty if you only use cloud LLMs (OpenAI, Vertex, Anthropic…).
+  baseUrl: ""
+  image: ollama/ollama:latest
+  storage: 20Gi
+  port: 11434
+  gpu: false  # set true for GPU nodes
+  models:
+    - qwen3.5:4b
+    - nomic-embed-text
+
+# -- Secrets Management
+# Controls how LLM credentials and GCP service accounts are provisioned.
+#
+# Three modes:
+#   "inline"   — API keys set directly in values (default, simplest for local dev)
+#   "external" — External Secrets Operator syncs from Vault / GCP SM / AWS SM
+#   "none"     — You manage Secrets yourself (e.g. Workload Identity, manual kubectl)
+secrets:
+  provider: "inline"
+
+  # -- External Secrets Operator (ESO) settings (provider: "external")
+  # Requires ESO installed: https://external-secrets.io
+  external:
+    # Name of the ClusterSecretStore or SecretStore to use
+    storeName: "recif-secret-store"
+    # Store kind: ClusterSecretStore (cluster-wide) or SecretStore (namespaced)
+    storeKind: "ClusterSecretStore"
+    # Refresh interval for secret sync
+    refreshInterval: "1h"
+    # Remote key paths — adapt to your backend (Vault, GCP SM, AWS SM)
+    keys:
+      # Key containing LLM provider API keys (JSON with GOOGLE_API_KEY, OPENAI_API_KEY, etc.)
+      agentEnv: "recif/agent-env"
+      # Key containing GCP service account JSON (for Vertex AI)
+      gcpServiceAccount: "recif/gcp-sa"
+
+# -- LLM Provider Credentials (secrets.provider: "inline")
+# Set API keys for the LLM providers your agents will use.
+# These are injected as a Secret into agent namespaces.
+# For production, use secrets.provider: "external" instead.
+llm:
+  # Google AI (simplest — just an API key from https://aistudio.google.com)
+  googleApiKey: ""
+  # OpenAI
+  openaiApiKey: ""
+  # Anthropic
+  anthropicApiKey: ""
+  # AWS Bedrock
+  awsRegion: ""
+  awsAccessKeyId: ""
+  awsSecretAccessKey: ""
+  # Google Cloud / Vertex AI (needs project + credentials)
+  gcp:
+    project: ""           # e.g. "my-project-123"
+    location: "us-central1"
+    # Base64-encoded GCP service account JSON key (inline mode only).
+    # Generate with: cat sa-key.json | base64 | tr -d '\n'
+    # For production, use External Secrets or Workload Identity instead.
+    serviceAccountKeyBase64: ""
+
+# -- MLflow (eval-driven lifecycle)
+mlflow:
+  enabled: true
+  image: python:3.13-slim   # MLflow installed at startup via pip
+  storage: 10Gi
+  port: 5000
+  postgresql:
+    password: mlflow_dev  # override in prod!
+
+# -- ArgoCD (platform layer GitOps)
+# When enabled, the chart installs ArgoCD configuration (namespace, ConfigMap with
+# health checks for Récif CRDs). ArgoCD does NOT manage agent CRDs at runtime —
+# that's the API's job. ArgoCD is reserved for future platform-layer GitOps.
+# Prerequisite: install ArgoCD Core first:
+#   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.14.14/manifests/core-install.yaml
+argocd:
+  enabled: false
+
+# -- Istio + Kiali (installed separately)
+# Istio is NOT bundled in this chart due to complexity.
+# To install Istio + Kiali for canary deployments, run:
+#   ./deploy/scripts/setup-istio.sh
+istio:
+  enabled: false
+
+# -- Ingress
+ingress:
+  enabled: false
+  className: nginx
+  host: recif.local
+  tls: false

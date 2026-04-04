@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  package:
+    name: Package & Push OCI Chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Package chart
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          helm package helm/recif/ --version "$VERSION" --app-version "$VERSION"
+      - name: Push to GHCR
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          helm push recif-${VERSION}.tgz oci://ghcr.io/recif-platform/helm-charts
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: recif-*.tgz
+          generate_release_notes: true

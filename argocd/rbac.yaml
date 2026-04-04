@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-recif-agents
+rules:
+  - apiGroups: ["agents.recif.dev"]
+    resources: ["agents", "agents/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["agents.recif.dev"]
+    resources: ["tools", "tools/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-recif-agents
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-recif-agents
+subjects:
+  - kind: ServiceAccount
+    name: argocd-application-controller
+    namespace: argocd

@@ -1,0 +1,57 @@
+{{- if .Values.argocd.enabled }}
+# ArgoCD Core configuration for the Récif platform.
+#
+# IMPORTANT: ArgoCD does NOT manage agent CRDs. Agents are created/updated/
+# deleted directly by the Récif API for fast, atomic operations. Git is used
+# only as an audit trail (one-way log) by the release handler.
+#
+# ArgoCD's role here is reserved for the PLATFORM layer (the Récif Helm chart
+# itself, the operator, configs). For now this template just installs the
+# ArgoCD namespace, RBAC, and ConfigMap so the platform team can later add
+# Application or ApplicationSet resources for the platform layer.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+---
+# ArgoCD ConfigMap: shared health checks for Récif CRDs.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  resource.customizations.health.agents.recif.dev_Agent: |
+    hs = {}
+    if obj.status ~= nil then
+      if obj.status.phase == "Running" then
+        hs.status = "Healthy"
+        hs.message = obj.status.endpoint or "Agent running"
+      elseif obj.status.phase == "Pending" then
+        hs.status = "Progressing"
+        hs.message = "Agent starting up"
+      elseif obj.status.phase == "Failed" then
+        hs.status = "Degraded"
+        hs.message = "Agent failed"
+      elseif obj.status.phase == "Terminated" then
+        hs.status = "Suspended"
+        hs.message = "Agent terminated"
+      else
+        hs.status = "Progressing"
+        hs.message = "Unknown phase: " .. (obj.status.phase or "nil")
+      end
+    else
+      hs.status = "Progressing"
+      hs.message = "Waiting for operator to set status"
+    end
+    return hs
+{{- end }}
