@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "recif.fullname" . }}-operator
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "operator") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "recif.fullname" . }}-operator
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "operator") | nindent 4 }}
+spec:
+  replicas: {{ .Values.operator.replicas }}
+  selector:
+    matchLabels:
+      {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "operator") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "operator") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "recif.fullname" . }}-operator
+      containers:
+        - name: operator
+          image: {{ printf "%s:%s" .Values.operator.image (.Values.global.imageTag | default "latest") }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - --leader-elect
+          env:
+            - name: CORAIL_IMAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "recif.fullname" . }}-config
+                  key: CORAIL_IMAGE
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "recif.fullname" . }}-config
+                  key: DATABASE_URL
+            {{- if .Values.ollama.enabled }}
+            - name: OLLAMA_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "recif.fullname" . }}-config
+                  key: OLLAMA_BASE_URL
+            {{- end }}
+            {{- if .Values.mlflow.enabled }}
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow.mlflow-system.svc.cluster.local:{{ .Values.mlflow.port }}"
+            {{- end }}
+            {{- if .Values.llm.gcp.project }}
+            - name: GOOGLE_CLOUD_PROJECT
+              value: {{ .Values.llm.gcp.project | quote }}
+            - name: GOOGLE_CLOUD_LOCATION
+              value: {{ .Values.llm.gcp.location | default "us-central1" | quote }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: gcp-config
+                optional: true
+          resources:
+            {{- toYaml .Values.operator.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10

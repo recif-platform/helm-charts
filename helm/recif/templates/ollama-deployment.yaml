@@ -1,0 +1,105 @@
+{{- if .Values.ollama.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "recif.fullname" . }}-ollama
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "ollama") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "ollama") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "ollama") | nindent 8 }}
+    spec:
+      {{- if .Values.ollama.gpu }}
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      {{- end }}
+      initContainers:
+        - name: model-pull
+          image: {{ .Values.ollama.image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Start ollama server in background
+              ollama serve &
+              SERVER_PID=$!
+              sleep 5
+              {{- range .Values.ollama.models }}
+              echo "Pulling model: {{ . }}"
+              ollama pull {{ . }}
+              {{- end }}
+              kill $SERVER_PID
+          volumeMounts:
+            - name: ollama-data
+              mountPath: /root/.ollama
+      containers:
+        - name: ollama
+          image: {{ .Values.ollama.image }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.ollama.port }}
+              protocol: TCP
+          {{- if .Values.ollama.gpu }}
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+          {{- end }}
+          volumeMounts:
+            - name: ollama-data
+              mountPath: /root/.ollama
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: ollama-data
+          persistentVolumeClaim:
+            claimName: {{ include "recif.fullname" . }}-ollama
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "recif.fullname" . }}-ollama
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "ollama") | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.ollama.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "recif.fullname" . }}-ollama
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "ollama") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.ollama.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "ollama") | nindent 4 }}
+{{- end }}

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "recif.fullname" . }}-config
+  labels:
+    {{- include "recif.labels" . | nindent 4 }}
+data:
+  DATABASE_URL: {{ include "recif.databaseUrl" . | quote }}
+  CORAIL_DATABASE_URL: {{ printf "postgresql+asyncpg://%s:%s@%s-postgresql:%d/%s" .Values.postgresql.credentials.username .Values.postgresql.credentials.password (include "recif.fullname" .) (.Values.postgresql.port | int) .Values.postgresql.credentials.database | quote }}
+  {{- if .Values.ollama.enabled }}
+  OLLAMA_BASE_URL: {{ include "recif.ollamaBaseUrl" . | quote }}
+  {{- end }}
+  AGENT_BASE_URL: {{ include "recif.agentBaseUrl" . | quote }}
+  {{- if .Values.mlflow.enabled }}
+  MLFLOW_TRACKING_URI: "http://mlflow.mlflow-system.svc.cluster.local:{{ .Values.mlflow.port }}"
+  {{- end }}
+  CORAIL_IMAGE: {{ printf "%s:%s" .Values.corail.image (.Values.global.imageTag | default "latest") | quote }}
+  CORAIL_DEFAULT_MODEL: {{ .Values.corail.defaultModel | quote }}

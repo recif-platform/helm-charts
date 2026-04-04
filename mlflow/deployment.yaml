@@ -1,0 +1,171 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlflow-system
+---
+# PostgreSQL for MLflow backend (required for managed datasets, trace search, assessments)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-mlflow
+  namespace: mlflow-system
+spec:
+  serviceName: postgres-mlflow
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-mlflow
+  template:
+    metadata:
+      labels:
+        app: postgres-mlflow
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: mlflow
+            - name: POSTGRES_USER
+              value: mlflow
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-secrets
+                  key: postgres-password
+                  optional: true
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-mlflow
+  namespace: mlflow-system
+spec:
+  selector:
+    app: postgres-mlflow
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None
+---
+# MLflow server — pinned version, PostgreSQL backend, persistent artifacts
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: mlflow-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+        - name: mlflow
+          image: recif-mlflow:latest  # Built from deploy/mlflow/Dockerfile (psycopg2 pre-installed)
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          command: ["mlflow", "server"]
+          args:
+            - "--host=0.0.0.0"
+            - "--port=5000"
+            - "--backend-store-uri=postgresql://mlflow:$(POSTGRES_PASSWORD)@postgres-mlflow.mlflow-system:5432/mlflow"
+            - "--default-artifact-root=/mlflow/artifacts"
+            - "--allowed-hosts=*"
+          env:
+            - name: MLFLOW_ALLOW_INBOUND_CONNECTIONS_FROM_ANY_HOST
+              value: "true"
+            - name: MLFLOW_ENABLE_ASYNC_TRACE_LOGGING
+              value: "true"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-secrets
+                  key: postgres-password
+                  optional: true
+          volumeMounts:
+            - name: mlflow-artifacts
+              mountPath: /mlflow/artifacts
+          resources:
+            requests:
+              cpu: 200m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: mlflow-artifacts
+          persistentVolumeClaim:
+            claimName: mlflow-artifacts-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts-pvc
+  namespace: mlflow-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: mlflow-system
+spec:
+  selector:
+    app: mlflow
+  ports:
+    - port: 5000
+      targetPort: 5000
+  type: ClusterIP
+---
+# Secret template — create with: kubectl create secret generic mlflow-secrets --from-literal=postgres-password=<password> -n mlflow-system
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mlflow-secrets
+  namespace: mlflow-system
+type: Opaque
+stringData:
+  postgres-password: "mlflow_prod_password"

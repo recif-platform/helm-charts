@@ -1,0 +1,153 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "recif.fullname" . }}-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "api") | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "recif.fullname" . }}-api
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "api") | nindent 4 }}
+rules:
+  - apiGroups:
+      - agents.recif.dev
+    resources:
+      - agents
+      - agents/status
+      - tools
+      - tools/status
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "recif.fullname" . }}-api
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "api") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "recif.fullname" . }}-api
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "recif.fullname" . }}-api
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "recif.fullname" . }}-operator
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "operator") | nindent 4 }}
+rules:
+  # Agent and Tool CRDs
+  - apiGroups:
+      - agents.recif.dev
+    resources:
+      - agents
+      - agents/status
+      - agents/finalizers
+      - tools
+      - tools/status
+      - tools/finalizers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Core resources managed by the operator
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - configmaps
+      - secrets
+      - serviceaccounts
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - statefulsets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Events
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  # Leader election
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "recif.fullname" . }}-operator
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "operator") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "recif.fullname" . }}-operator
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "recif.fullname" . }}-operator
+    namespace: {{ .Release.Namespace }}

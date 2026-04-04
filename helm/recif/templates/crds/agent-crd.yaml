@@ -1,0 +1,381 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: agents.agents.recif.dev
+  labels:
+    {{- include "recif.labels" . | nindent 4 }}
+spec:
+  group: agents.recif.dev
+  names:
+    kind: Agent
+    listKind: AgentList
+    plural: agents
+    singular: agent
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.replicas
+      name: Replicas
+      type: integer
+    - jsonPath: .status.endpoint
+      name: Endpoint
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AgentSpec defines the desired state of an Agent
+            properties:
+              channel:
+                default: rest
+                type: string
+              credentialSecret:
+                description: Name of a Secret containing a GCP/AWS credentials file to mount (defaults to gcp-adc)
+                type: string
+              databaseUrl:
+                type: string
+              envSecrets:
+                description: List of Secret names whose data will be injected as env vars (defaults to [agent-env])
+                items:
+                  type: string
+                type: array
+              framework:
+                enum:
+                - corail
+                - adk
+                - langchain
+                - crewai
+                - autogen
+                - custom
+                type: string
+              image:
+                default: corail:latest
+                type: string
+              knowledgeBases:
+                description: Knowledge base IDs for RAG strategy
+                items:
+                  type: string
+                type: array
+              modelId:
+                default: stub-echo
+                type: string
+              modelType:
+                default: stub
+                type: string
+              name:
+                type: string
+              replicas:
+                default: 1
+                format: int32
+                maximum: 10
+                minimum: 0
+                type: integer
+              storage:
+                default: memory
+                enum:
+                - memory
+                - postgresql
+                type: string
+              strategy:
+                default: simple
+                type: string
+              systemPrompt:
+                type: string
+              tools:
+                description: List of Tool CRD names assigned to this agent
+                items:
+                  type: string
+                type: array
+              skills:
+                description: List of skill names assigned to this agent
+                items:
+                  type: string
+                type: array
+              canary:
+                description: Canary deployment configuration
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  weight:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                  image:
+                    type: string
+                  modelType:
+                    type: string
+                  modelId:
+                    type: string
+                  systemPrompt:
+                    type: string
+                  skills:
+                    items:
+                      type: string
+                    type: array
+                  tools:
+                    items:
+                      type: string
+                    type: array
+                  version:
+                    type: string
+            required:
+            - framework
+            - name
+            type: object
+          status:
+            description: AgentStatus defines the observed state of Agent
+            properties:
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              endpoint:
+                type: string
+              phase:
+                enum:
+                - Pending
+                - Running
+                - Failed
+                - Terminated
+                type: string
+              replicas:
+                format: int32
+                type: integer
+            type: object
+        required:
+        - metadata
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: tools.agents.recif.dev
+  labels:
+    {{- include "recif.labels" . | nindent 4 }}
+spec:
+  group: agents.recif.dev
+  names:
+    kind: Tool
+    listKind: ToolList
+    plural: tools
+    singular: tool
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.name
+      name: Name
+      type: string
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.category
+      name: Category
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: Tool is the Schema for the tools API
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ToolSpec defines the desired state of a Tool
+            properties:
+              allowedCommands:
+                items:
+                  type: string
+                type: array
+              binary:
+                description: CLI tool fields
+                type: string
+              category:
+                default: general
+                type: string
+              description:
+                type: string
+              enabled:
+                default: true
+                type: boolean
+              endpoint:
+                description: HTTP tool fields
+                type: string
+              headers:
+                additionalProperties:
+                  type: string
+                type: object
+              mcpEndpoint:
+                description: MCP tool fields
+                type: string
+              method:
+                type: string
+              name:
+                type: string
+              parameters:
+                items:
+                  description: ToolParameter defines a parameter accepted by a tool
+                  properties:
+                    default:
+                      type: string
+                    description:
+                      type: string
+                    name:
+                      type: string
+                    required:
+                      type: boolean
+                    type:
+                      enum:
+                      - string
+                      - integer
+                      - number
+                      - boolean
+                      type: string
+                  required:
+                  - name
+                  - type
+                  type: object
+                type: array
+              secretRef:
+                description: Common
+                type: string
+              timeout:
+                default: 30
+                format: int32
+                type: integer
+              type:
+                enum:
+                - http
+                - cli
+                - mcp
+                - builtin
+                type: string
+            required:
+            - name
+            - type
+            type: object
+          status:
+            description: ToolStatus defines the observed state of Tool
+            properties:
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              message:
+                type: string
+              phase:
+                enum:
+                - Available
+                - Error
+                type: string
+            type: object
+        required:
+        - metadata
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

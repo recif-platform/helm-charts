@@ -1,0 +1,4 @@
+region       = "us-east-1"
+cluster_name = "recif-prod"
+db_password  = "CHANGE_ME_use_secrets_manager"
+domain       = "recif.example.com"

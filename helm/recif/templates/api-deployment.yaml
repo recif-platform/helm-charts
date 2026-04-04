@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "recif.fullname" . }}-api
+  labels:
+    {{- include "recif.componentLabels" (dict "Root" . "Component" "api") | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "recif.componentSelectorLabels" (dict "Root" . "Component" "api") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "recif.fullname" . }}-api
+      containers:
+        - name: recif-api
+          image: {{ printf "%s:%s" .Values.api.image (.Values.global.imageTag | default "latest") }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.port }}
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: {{ include "recif.fullname" . }}-api-secrets
+                optional: true
+          env:
+            - name: RECIF_PORT
+              value: {{ .Values.api.port | quote }}
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "recif.fullname" . }}-config
+                  key: DATABASE_URL
+            - name: AGENT_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "recif.fullname" . }}-config
+                  key: AGENT_BASE_URL
+            - name: AUTH_ENABLED
+              value: {{ .Values.api.env.AUTH_ENABLED | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.api.env.LOG_LEVEL | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.api.env.LOG_FORMAT | quote }}
+            - name: ENV_PROFILE
+              value: {{ .Values.api.env.ENV_PROFILE | quote }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
