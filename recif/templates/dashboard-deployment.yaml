@@ -26,6 +26,8 @@ spec:
           env:
             - name: NEXT_PUBLIC_API_URL
               value: {{ if .Values.dashboard.apiUrl }}{{ .Values.dashboard.apiUrl | quote }}{{ else }}http://{{ include "recif.fullname" . }}-api:{{ .Values.api.port }}{{ end }}
+            - name: NEXT_PUBLIC_AUTH_ENABLED
+              value: {{ .Values.api.env.AUTH_ENABLED | quote }}
           resources:
             {{- toYaml .Values.dashboard.resources | nindent 12 }}
           livenessProbe:
