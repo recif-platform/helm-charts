@@ -44,6 +44,15 @@ rules:
       - patch
       - update
   - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - create
+      - get
+      - list
+      - delete
+  - apiGroups:
       - apps
     resources:
       - deployments
