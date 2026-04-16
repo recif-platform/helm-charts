@@ -40,6 +40,11 @@ spec:
                 configMapKeyRef:
                   name: {{ include "recif.fullname" . }}-config
                   key: AGENT_BASE_URL
+            - name: KB_DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "recif.fullname" . }}-config
+                  key: KB_DATABASE_URL
             - name: AUTH_ENABLED
               value: {{ .Values.api.env.AUTH_ENABLED | quote }}
             - name: LOG_LEVEL

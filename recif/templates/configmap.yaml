@@ -6,6 +6,7 @@ metadata:
     {{- include "recif.labels" . | nindent 4 }}
 data:
   DATABASE_URL: {{ include "recif.databaseUrl" . | quote }}
+  KB_DATABASE_URL: {{ printf "postgres://%s:%s@%s-postgresql:%d/corail_storage?sslmode=disable" .Values.postgresql.credentials.username .Values.postgresql.credentials.password (include "recif.fullname" .) (.Values.postgresql.port | int) | quote }}
   CORAIL_DATABASE_URL: {{ printf "postgresql+asyncpg://%s:%s@%s-postgresql:%d/%s" .Values.postgresql.credentials.username .Values.postgresql.credentials.password (include "recif.fullname" .) (.Values.postgresql.port | int) .Values.postgresql.credentials.database | quote }}
   {{- with (include "recif.ollamaBaseUrl" .) }}
   OLLAMA_BASE_URL: {{ . | quote }}
